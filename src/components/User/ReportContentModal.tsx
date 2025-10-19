@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { X, Flag, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
+import type { Database } from '../../lib/database.types';
 
 interface ReportContentModalProps {
   contentId: string;
   onClose: () => void;
-  // onSubmit: (contentId: string, reason: string, details: string) => void; // No longer needed as prop
 }
 
 export function ReportContentModal({ contentId, onClose }: ReportContentModalProps) {
@@ -20,17 +20,19 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
     setLoading(true);
     setError(null);
 
-    const user = await supabase.auth.getUser();
-    const reporterId = user.data.user?.id;
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const reporterId = userData.user?.id;
 
-    if (!reporterId) {
+    if (userError || !reporterId) {
       setError('Você precisa estar logado para denunciar conteúdo.');
+      toast.error('Você precisa estar logado para denunciar conteúdo.');
       setLoading(false);
       return;
     }
 
     if (!reason) {
       setError('Por favor, selecione um motivo para a denúncia.');
+      toast.error('Por favor, selecione um motivo para a denúncia.');
       setLoading(false);
       return;
     }
@@ -69,7 +71,7 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
       }
 
       if (admins && admins.length > 0) {
-        const adminEmails = admins.map(admin => admin.email);
+        const adminEmails = admins.map(admin => admin.email).filter((email): email is string => email !== null);
         const adminSubject = 'Nova Denúncia de Conteúdo Pendente de Revisão';
         const adminBody = `
           <p>Olá Administrador,</p>
@@ -107,6 +109,7 @@ export function ReportContentModal({ contentId, onClose }: ReportContentModalPro
     } catch (err: any) {
       console.error('Error submitting report:', err);
       setError('Falha ao enviar denúncia: ' + err.message);
+      toast.error('Falha ao enviar denúncia: ' + err.message);
     } finally {
       setLoading(false);
     }

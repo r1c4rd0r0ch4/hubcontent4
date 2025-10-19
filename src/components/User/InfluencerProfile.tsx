@@ -7,6 +7,7 @@ import { VideoPlayer } from '../Shared/VideoPlayer'; // This component is not us
 import { StreamingBookModal } from './StreamingBookModal';
 import { ReportContentModal } from './ReportContentModal';
 import { PurchaseContentModal } from './PurchaseContentModal'; // Import the new modal
+import { toast } from 'react-hot-toast'; // Import toast
 import type { Database } from '../../lib/database.types';
 
 type ContentPost = Database['public']['Tables']['content_posts']['Row'];
@@ -215,27 +216,36 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
   }, [influencerId, loadInfluencerData, loadContents, checkStreamingEnabled, contents.length]);
 
   const handleLike = async (contentId: string) => {
-    if (!currentUser) return;
+    if (!currentUser) {
+      toast.error('Você precisa estar logado para curtir conteúdo.');
+      return;
+    }
 
     const content = contents.find(c => c.id === contentId);
     if (!content) return;
 
-    if (content.isLiked) {
-      await supabase
-        .from('content_likes')
-        .delete()
-        .eq('content_id', contentId)
-        .eq('user_id', currentUser.id);
-    } else {
-      await supabase
-        .from('content_likes')
-        .insert({
-          content_id: contentId,
-          user_id: currentUser.id,
-        });
+    try {
+      if (content.isLiked) {
+        const { error } = await supabase
+          .from('content_likes')
+          .delete()
+          .eq('content_id', contentId)
+          .eq('user_id', currentUser.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('content_likes')
+          .insert({
+            content_id: contentId,
+            user_id: currentUser.id,
+          });
+        if (error) throw error;
+      }
+      loadContents(); // Reload contents to update like count and status
+    } catch (error: any) {
+      console.error('Error liking/unliking content:', error.message);
+      toast.error('Falha ao curtir/descurtir conteúdo: ' + error.message);
     }
-
-    loadContents();
   };
 
   const handleStartConversation = async () => {
@@ -249,6 +259,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
     if (convError) {
       console.error('Error checking existing conversation:', convError);
+      toast.error('Falha ao iniciar conversa.');
       return;
     }
 
@@ -267,6 +278,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
       if (createConvError) {
         console.error('Error creating new conversation:', createConvError);
+        toast.error('Falha ao criar nova conversa.');
         return;
       }
       conversationId = newConversation.id;
@@ -281,6 +293,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
 
     if (messageError) {
       console.error('Error sending initial message:', messageError);
+      toast.error('Falha ao enviar mensagem inicial.');
       return;
     }
 
@@ -291,10 +304,12 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
     if (!currentUser) return;
 
     try {
-      const { data } = await supabase.rpc('record_content_view', {
+      const { data, error } = await supabase.rpc('record_content_view', {
         p_content_id: contentId,
         p_viewer_id: currentUser.id,
       });
+
+      if (error) throw error;
 
       if (data !== null) {
         setContents(prev =>
@@ -303,35 +318,15 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           )
         );
       }
-    } catch (error) {
-      console.error('Error recording view:', error);
+    } catch (error: any) {
+      console.error('Error recording view:', error.message);
+      // toast.error('Falha ao registrar visualização: ' + error.message); // Avoid spamming toast on every view
     }
   };
 
   const handleReportContent = (contentId: string) => {
     setSelectedContentToReport(contentId);
     setShowReportModal(true);
-  };
-
-  const handleReportSubmit = async (contentId: string, reason: string, details: string) => {
-    if (!currentUser) return;
-
-    const { error } = await supabase.from('reported_content').insert({
-      content_id: contentId,
-      reporter_id: currentUser.id,
-      reason: reason,
-      admin_notes: details,
-      status: 'pending',
-    });
-
-    if (error) {
-      console.error('Error reporting content:', error);
-      alert('Falha ao denunciar conteúdo.');
-    } else {
-      alert('Conteúdo denunciado com sucesso! Agradecemos sua contribuição.');
-      setShowReportModal(false);
-      setSelectedContentToReport(null);
-    }
   };
 
   const handlePurchaseContent = (content: ContentPost) => {
@@ -647,8 +642,9 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           onClose={() => setShowSubscribeModal(false)}
           onSuccess={() => {
             setShowSubscribeModal(false);
-            loadInfluencerData();
+            loadInfluencerData(); // Reload influencer data to update subscription status
             loadContents(); // Reload contents to update access status
+            toast.success('Assinatura realizada com sucesso!');
           }}
         />
       )}
@@ -660,7 +656,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           onClose={() => setShowStreamingModal(false)}
           onSuccess={() => {
             setShowStreamingModal(false);
-            alert('Solicitação enviada! Aguarde a aprovação do influencer.');
+            toast.success('Solicitação de streaming enviada! Aguarde a aprovação do influencer.');
           }}
         />
       )}
@@ -671,8 +667,8 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
           onClose={() => {
             setShowReportModal(false);
             setSelectedContentToReport(null);
+            loadContents(); // Reload contents to reflect potential status change
           }}
-          onSubmit={handleReportSubmit}
         />
       )}
 
@@ -690,7 +686,7 @@ export function InfluencerProfile({ influencerId, onBack }: { influencerId: stri
             setShowPurchaseModal(false);
             setSelectedContentToPurchase(null);
             loadContents(); // Reload contents to show purchased status
-            alert('Conteúdo comprado com sucesso!');
+            toast.success('Conteúdo comprado com sucesso!');
           }}
         />
       )}
@@ -712,46 +708,58 @@ function SubscribeModal({
   const [loading, setLoading] = useState(false);
 
   const handleSubscribe = async () => {
-    if (!profile) return;
+    if (!profile) {
+      toast.error('Você precisa estar logado para assinar.');
+      return;
+    }
 
     setLoading(true);
 
-    const expiresAt = new Date();
-    expiresAt.setMonth(expiresAt.getMonth() + 1);
+    try {
+      const expiresAt = new Date();
+      expiresAt.setMonth(expiresAt.getMonth() + 1); // 1 month from now
 
-    const { data: subscription, error: subError } = await supabase
-      .from('subscriptions')
-      .insert({
-        subscriber_id: profile.id,
-        influencer_id: influencer.profile.id,
-        status: 'active',
-        price_paid: influencer.subscription_price,
-        expires_at: expiresAt.toISOString(),
-      })
-      .select()
-      .single();
+      const { data: subscription, error: subError } = await supabase
+        .from('subscriptions')
+        .insert({
+          subscriber_id: profile.id,
+          influencer_id: influencer.profile.id,
+          status: 'active',
+          price_paid: influencer.subscription_price,
+          expires_at: expiresAt.toISOString(),
+        })
+        .select()
+        .single();
 
-    if (!subError && subscription) {
+      if (subError || !subscription) {
+        throw new Error(subError?.message || 'Falha ao criar assinatura.');
+      }
+
       const platformFee = influencer.subscription_price * 0.1;
       const influencerEarnings = influencer.subscription_price * 0.9;
 
-      await supabase.from('payments').insert({
+      const { error: paymentError } = await supabase.from('payments').insert({
         subscription_id: subscription.id,
         subscriber_id: profile.id,
         influencer_id: influencer.profile.id,
         amount: influencer.subscription_price,
         platform_fee: platformFee,
         influencer_earnings: influencerEarnings,
-        payment_status: 'completed',
+        payment_status: 'completed', // Assuming immediate completion for now
         payment_method: paymentMethod,
       });
 
-      onSuccess();
-    } else {
-      alert('Erro ao processar assinatura');
-    }
+      if (paymentError) {
+        throw new Error(paymentError.message || 'Falha ao registrar pagamento.');
+      }
 
-    setLoading(false);
+      onSuccess();
+    } catch (error: any) {
+      console.error('Error processing subscription:', error.message);
+      toast.error('Erro ao processar assinatura: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -773,6 +781,7 @@ function SubscribeModal({
           <label className="block text-sm font-medium text-textSecondary mb-3">Método de Pagamento</label>
           <div className="space-y-2">
             <button
+              type="button"
               onClick={() => setPaymentMethod('credit_card')}
               className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                 paymentMethod === 'credit_card'
@@ -783,6 +792,7 @@ function SubscribeModal({
               <span className="font-medium">Cartão de Crédito</span>
             </button>
             <button
+              type="button"
               onClick={() => setPaymentMethod('pix')}
               className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                 paymentMethod === 'pix'
@@ -793,6 +803,7 @@ function SubscribeModal({
               <span className="font-medium">PIX</span>
             </button>
             <button
+              type="button"
               onClick={() => setPaymentMethod('paypal')}
               className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
                 paymentMethod === 'paypal'
@@ -807,12 +818,14 @@ function SubscribeModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             className="flex-1 px-6 py-3 border border-border text-textSecondary rounded-lg font-semibold hover:bg-background transition-colors"
           >
             Cancelar
           </button>
           <button
+            type="button"
             onClick={handleSubscribe}
             disabled={loading}
             className="flex-1 px-6 py-3 bg-accent text-white rounded-lg font-semibold hover:bg-accent/90 transition-colors disabled:opacity-50"

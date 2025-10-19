@@ -97,7 +97,7 @@ export type Database = {
           is_free: boolean
           is_purchasable: boolean
           price: number
-          status: string
+          status: Database["public"]["Enums"]["content_post_status"]
           thumbnail_url: string | null
           title: string
           type: string
@@ -113,7 +113,7 @@ export type Database = {
           is_free?: boolean
           is_purchasable?: boolean
           price?: number
-          status?: string
+          status?: Database["public"]["Enums"]["content_post_status"]
           thumbnail_url?: string | null
           title: string
           type: string
@@ -129,7 +129,7 @@ export type Database = {
           is_free?: boolean
           is_purchasable?: boolean
           price?: number
-          status?: string
+          status?: Database["public"]["Enums"]["content_post_status"]
           thumbnail_url?: string | null
           title?: string
           type?: string
@@ -442,9 +442,11 @@ export type Database = {
           bio: string | null
           cover_photo_url: string | null
           created_at: string
+          email: string | null
           full_name: string | null
           id: string
           is_active: boolean
+          is_admin: boolean
           is_influencer: boolean
           updated_at: string | null
           user_type: string
@@ -456,9 +458,11 @@ export type Database = {
           bio?: string | null
           cover_photo_url?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id: string
           is_active?: boolean
+          is_admin?: boolean
           is_influencer?: boolean
           updated_at?: string | null
           user_type?: string
@@ -470,9 +474,11 @@ export type Database = {
           bio?: string | null
           cover_photo_url?: string | null
           created_at?: string
+          email?: string | null
           full_name?: string | null
           id?: string
           is_active?: boolean
+          is_admin?: boolean
           is_influencer?: boolean
           updated_at?: string | null
           user_type?: string
@@ -743,7 +749,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      content_post_status: "draft" | "pending_review" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
